@@ -1,0 +1,43 @@
+{
+  "name": "@cloudmcp/connect",
+  "version": "1.0.0",
+  "description": "Connect to MCP SSE servers and proxy them to stdio",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "cloudmcp-connect": "./dist/cli.js"
+  },
+  "scripts": {
+    "start": "node dist/cli.js",
+    "build": "tsc",
+    "dev": "tsx watch src/cli.ts",
+    "clean": "rm -rf dist",
+    "prebuild": "pnpm run clean",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "commander": "^11.1.0",
+    "winston": "^3.17.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.17.30",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  },
+  "keywords": [
+    "mcp",
+    "sse",
+    "gateway",
+    "stdio"
+  ],
+  "author": "",
+  "license": "MIT"
+}
