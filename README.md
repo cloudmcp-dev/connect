@@ -11,7 +11,6 @@ This is useful to connect to **@cloudmcp/gateway**
 - Configurable logging levels
 - Custom header support
 - Support for authentication via client credentials
-- Docker support
 - Works with Claude Desktop
 
 ## Installation
@@ -20,12 +19,6 @@ This is useful to connect to **@cloudmcp/gateway**
 
 ```bash
 npx -y @cloudmcp/connect --url "https://gateway.cloudmcp.dev/<organization>/<service>/sse" --clientId "<client_id>" --clientSecret "<client_secret>"
-```
-
-### Using Docker
-
-```bash
-docker run -i --rm cloudmcp/connect --url "https://gateway.cloudmcp.dev/<organization>/<service>/sse" --clientId "<client_id>" --clientSecret "<client_secret>"
 ```
 
 ## Options
@@ -50,30 +43,6 @@ Claude Desktop can use @cloudmcp/connect to connect to CloudMCP Gateway.
       "args": [
         "-y",
         "@cloudmcp/connect",
-        "--url",
-        "https://gateway.cloudmcp.dev/<organization>/<service>/sse",
-        "--clientId",
-        "<client_id>",
-        "--clientSecret",
-        "<client_secret>"
-      ]
-    }
-  }
-}
-```
-
-### Docker-based MCP Server Example
-
-```json
-{
-  "mcpServers": {
-    "cloudmcpDocker": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "cloudmcp/connect",
         "--url",
         "https://gateway.cloudmcp.dev/<organization>/<service>/sse",
         "--clientId",
