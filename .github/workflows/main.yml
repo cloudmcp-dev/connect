@@ -54,13 +54,13 @@ jobs:
           CI: true
 
   build-and-push:
-    name: Build and Push to ECR
+    name: Build and Push to NPM
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     permissions:
       id-token: write
-      contents: read
+      contents: write
 
     steps:
       - name: Checkout code
@@ -100,5 +100,29 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
+
+      - name: Bump version and push tag
+        id: version-bump
+        uses: phips28/gh-action-bump-version@master
+        with:
+          tag-prefix: 'v'
+          minor-wording: 'feat,feature'
+          major-wording: 'MAJOR,major'
+          patch-wording: 'fix,patch'
+          rc-wording: 'RELEASE,alpha'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Build package
+        run: pnpm build
+
+      - name: Set up NPM authentication
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+          
+      - name: Publish to NPM
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       
