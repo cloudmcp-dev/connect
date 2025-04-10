@@ -4,17 +4,33 @@
 
 This is useful to connect to **@cloudmcp/gateway**
 
-## Installation & Usage
+## Features
 
-Run @cloudmcp/connect via `npx`:
+- Connect to Model Context Protocol (MCP) SSE servers
+- Proxy server responses to standard input/output
+- Configurable logging levels
+- Custom header support
+- Support for authentication via client credentials
+- Docker support
+- Works with Claude Desktop
+
+## Installation
+
+### Using npm/npx
 
 ```bash
-npx -y @cloudmcp/connect --url "https://gateway.cloudmcp.dev/<organization>/<service>" --clientId "<client_id>" --clientSecret "<client_secret>"
+npx -y @cloudmcp/connect --url "https://gateway.cloudmcp.dev/<organization>/<service>/sse" --clientId "<client_id>" --clientSecret "<client_secret>"
+```
+
+### Using Docker
+
+```bash
+docker run -i --rm cloudmcp/connect --url "https://gateway.cloudmcp.dev/<organization>/<service>/sse" --clientId "<client_id>" --clientSecret "<client_secret>"
 ```
 
 ## Options
 
-- **`--url <url>`**: The CloudMCP Gateway URL in the format `https://gateway.cloudmcp.dev/<organization>/<service>`
+- **`--url <url>`**: The CloudMCP Gateway URL in the format `https://gateway.cloudmcp.dev/<organization>/<service>/sse`
 - **`--clientId <client_id>`**: Your CloudMCP client ID for authentication
 - **`--clientSecret <client_secret>`**: Your CloudMCP client secret for authentication
 - **`--logLevel debug | info | warn | error | none`**: Controls logging level (default: `info`). Use `none` to suppress all logs.
@@ -35,7 +51,7 @@ Claude Desktop can use @cloudmcp/connect to connect to CloudMCP Gateway.
         "-y",
         "@cloudmcp/connect",
         "--url",
-        "https://gateway.cloudmcp.dev/<organization>/<service>",
+        "https://gateway.cloudmcp.dev/<organization>/<service>/sse",
         "--clientId",
         "<client_id>",
         "--clientSecret",
@@ -59,7 +75,7 @@ Claude Desktop can use @cloudmcp/connect to connect to CloudMCP Gateway.
         "--rm",
         "cloudmcp/connect",
         "--url",
-        "https://gateway.cloudmcp.dev/<organization>/<service>",
+        "https://gateway.cloudmcp.dev/<organization>/<service>/sse",
         "--clientId",
         "<client_id>",
         "--clientSecret",
@@ -70,12 +86,54 @@ Claude Desktop can use @cloudmcp/connect to connect to CloudMCP Gateway.
 }
 ```
 
+## Development
+
+### Prerequisites
+
+- Node.js 18 or later
+- pnpm 8.x
+
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/cloudmcp/cloudmcp-connect.git
+cd cloudmcp-connect
+
+# Install dependencies
+pnpm install
+
+# Build the project
+pnpm build
+
+# Run tests
+pnpm test
+```
+
+### Available Scripts
+
+- `pnpm start` - Run the built application
+- `pnpm build` - Build the TypeScript project
+- `pnpm dev` - Run the application in development mode with hot reloading
+- `pnpm clean` - Clean the build directory
+- `pnpm test` - Run tests
+- `pnpm test:watch` - Run tests in watch mode
+- `pnpm test:coverage` - Run tests with coverage reporting
+
 ## Contributing
 
-TODO: Write a short contribution note
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-new-feature`
+3. Commit your changes: `git commit -am 'Add some feature'`
+4. Push to the branch: `git push origin feature/my-new-feature`
+5. Submit a pull request
+
+Make sure your code passes all tests and follows the project's coding style.
 
 ## License
 
-[Commercial License](./LICENSE)
+[MIT License](./LICENSE)
 
-This software is licensed under a commercial license agreement. All rights reserved. Unauthorized copying, modification, distribution, or use of this software is strictly prohibited. For licensing inquiries, please contact CloudMCP.
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.

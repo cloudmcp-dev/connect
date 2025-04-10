@@ -1,141 +1,104 @@
 import { program } from 'commander';
-import { MCPServer } from '../src/index.js';
+import { SseToStdioArgs } from '../src/index.js';
 
-// Mock console.error to avoid polluting test output
-const originalConsoleError = console.error;
-console.error = jest.fn();
-
-// Mock MCPServer
-const mockServer = {
-  start: jest.fn().mockResolvedValue(undefined),
-  stop: jest.fn(),
-};
-
-const mockMCPServer = jest.fn().mockImplementation(() => mockServer);
-
+// Mock the sseToStdio function
 jest.mock('../src/index.js', () => ({
-  MCPServer: mockMCPServer,
+    sseToStdio: jest.fn().mockImplementation((args: SseToStdioArgs) => {
+        // Just log the args for testing
+        console.log('sseToStdio called with:', JSON.stringify(args));
+        return Promise.resolve();
+    })
 }));
 
+// Tests for CLI functionality
 describe('CLI', () => {
-  let mockProcess: any;
-  let originalProcessExit: any;
-  let mockExit: jest.Mock;
+    let originalArgv: string[];
+    let mockExit: jest.SpyInstance;
+    let mockConsoleError: jest.SpyInstance;
+    let mockConsoleLog: jest.SpyInstance;
 
-  beforeEach(() => {
-    // Save original process.exit
-    originalProcessExit = process.exit;
-    mockExit = jest.fn();
-    process.exit = mockExit as any;
-
-    // Mock process.argv
-    mockProcess = {
-      argv: ['node', 'cli.js'],
-      exit: mockExit,
-      on: jest.fn(),
-    };
-    global.process = mockProcess as any;
-
-    // Reset module cache
-    jest.resetModules();
-
-    // Reset mocks
-    jest.clearAllMocks();
-    mockServer.start.mockResolvedValue(undefined);
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
-    // Restore original process.exit
-    process.exit = originalProcessExit;
-  });
-
-  afterAll(() => {
-    // Restore console.error
-    console.error = originalConsoleError;
-  });
-
-  it('should create server with correct options', async () => {
-    // Simulate command line arguments
-    process.argv = [
-      'node',
-      'cli.js',
-      '--stdio', 'test-command',
-      '--port', '3000',
-      '--ssePath', '/custom-sse',
-      '--messagePath', '/custom-message',
-      '--logLevel', 'debug',
-      '--cors',
-      '--healthEndpoint', '/health1',
-      '--healthEndpoint', '/health2',
-      '--header', 'X-Test: test-value'
-    ];
-
-    // Import CLI module
-    await import('../src/cli.js');
-
-    expect(mockMCPServer).toHaveBeenCalledWith({
-      port: 3000,
-      baseUrl: 'http://localhost:3000',
-      ssePath: '/custom-sse',
-      messagePath: '/custom-message',
-      logLevel: 'debug',
-      cors: true,
-      healthEndpoints: ['/health1', '/health2'],
-      stdioCmd: 'test-command',
-      headers: ['X-Test: test-value'],
+    beforeEach(() => {
+        // Store original process.argv
+        originalArgv = process.argv;
+        // Mock process.exit and console methods
+        mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+        mockConsoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+        mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+        // Clear all mocks
+        jest.clearAllMocks();
+        // Reset module cache to reload CLI
+        jest.resetModules();
     });
-  });
 
-  it('should handle missing stdio command', async () => {
-    // Simulate command line without required stdio command
-    process.argv = ['node', 'cli.js', '--port', '3000'];
+    afterEach(() => {
+        // Restore original process.argv
+        process.argv = originalArgv;
+        // Restore mocked functions
+        mockExit.mockRestore();
+        mockConsoleError.mockRestore();
+        mockConsoleLog.mockRestore();
+    });
 
-    // Import CLI module
-    await import('../src/cli.js');
+    it('should parse required URL option', async () => {
+        process.argv = ['node', 'cli.js', '--url', 'http://test-url.com'];
+        
+        // Import CLI module
+        await import('../src/cli.js');
+        
+        // Verify that console.log was called with the expected args
+        expect(mockConsoleLog).toHaveBeenCalledWith(
+            'sseToStdio called with:',
+            expect.stringContaining('http://test-url.com')
+        );
+    });
 
-    expect(mockExit).toHaveBeenCalledWith(1);
-  });
+    it('should parse all options correctly', async () => {
+        process.argv = [
+            'node', 'cli.js',
+            '--url', 'http://test-url.com',
+            '--logLevel', 'debug',
+            '--header', 'Authorization: Bearer token'
+        ];
+        
+        // Import CLI module
+        await import('../src/cli.js');
+        
+        // Verify that console.log was called with the expected args
+        expect(mockConsoleLog).toHaveBeenCalledWith(
+            'sseToStdio called with:',
+            expect.stringContaining('Authorization: Bearer token')
+        );
+    });
 
-  it('should handle server start failure', async () => {
-    // Setup server start failure
-    mockServer.start.mockRejectedValue(new Error('Start failed'));
+    it('should handle multiple headers', async () => {
+        process.argv = [
+            'node', 'cli.js',
+            '--url', 'http://test-url.com',
+            '--header', 'Authorization: Bearer token',
+            '--header', 'X-Custom-Header: value'
+        ];
+        
+        // Import CLI module
+        await import('../src/cli.js');
+        
+        // Verify that console.log was called with the expected args
+        expect(mockConsoleLog).toHaveBeenCalledWith(
+            'sseToStdio called with:',
+            expect.stringContaining('X-Custom-Header: value')
+        );
+    });
 
-    // Simulate command line arguments
-    process.argv = ['node', 'cli.js', '--stdio', 'test-command'];
+    it('should handle sseToStdio errors', async () => {
+        // Force an error to be thrown from sseToStdio
+        const mockSseToStdio = jest.requireMock('../src/index.js').sseToStdio;
+        mockSseToStdio.mockRejectedValueOnce(new Error('Connection failed'));
 
-    // Import CLI module
-    await import('../src/cli.js');
-
-    // Wait for the promise rejection to be handled
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    expect(mockExit).toHaveBeenCalledWith(1);
-  });
-
-  it('should handle process termination signals', async () => {
-    // Simulate command line arguments
-    process.argv = ['node', 'cli.js', '--stdio', 'test-command'];
-
-    // Import CLI module
-    await import('../src/cli.js');
-
-    // Get and call the signal handlers
-    const handlers = mockProcess.on.mock.calls.reduce((acc: any, [event, handler]: [string, Function]) => {
-      acc[event] = handler;
-      return acc;
-    }, {});
-
-    // Simulate SIGINT
-    handlers.SIGINT();
-    expect(mockServer.stop).toHaveBeenCalled();
-    expect(mockExit).toHaveBeenCalledWith(0);
-
-    jest.clearAllMocks();
-
-    // Simulate SIGTERM
-    handlers.SIGTERM();
-    expect(mockServer.stop).toHaveBeenCalled();
-    expect(mockExit).toHaveBeenCalledWith(0);
-  });
+        process.argv = ['node', 'cli.js', '--url', 'http://test-url.com'];
+        
+        // Import CLI module
+        await import('../src/cli.js');
+        
+        // Verify that exit was called with code 1
+        expect(mockExit).toHaveBeenCalledWith(1);
+    });
 }); 
