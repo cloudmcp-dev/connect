@@ -25,7 +25,7 @@ const jsonRpcRequestSchema = z.object({
     jsonrpc: z.literal('2.0'),
     method: z.string(),
     params: z.any().optional(),
-    id: z.union([z.string(), z.number()])
+    id: z.union([z.string(), z.number()]).optional()
 });
 
 const jsonRpcResponseSchema = z.object({
@@ -226,10 +226,16 @@ export async function sseToStdio(args: SseToStdioArgs) {
     await stdioServer.connect(stdioTransport);
 
     // Handle messages from stdio
-    stdioServer.transport!.onmessage = async (message: JSONRPCMessage) => {
+    stdioServer.transport!.onmessage = async (message: any) => {
         try {
             // Parse the message
-            const parsedMessage = JSON.parse(JSON.stringify(message));
+            let parsedMessage;
+            try {
+                parsedMessage = JSON.parse(JSON.stringify(message));
+            } catch (parseErr) {
+                logger.error('[STDIO-IN] Failed to parse message as JSON:', parseErr);
+                return;
+            }
             
             // Skip if it's a log message
             if (parsedMessage.level && parsedMessage.message && parsedMessage.timestamp) {
@@ -237,125 +243,88 @@ export async function sseToStdio(args: SseToStdioArgs) {
                 return;
             }
 
-            // First try to parse as a JSON-RPC request
-            try {
-                const validatedMessage = jsonRpcRequestSchema.parse(parsedMessage);
-                
-                // Check if this is a local method
-                if (methods[validatedMessage.method]) {
-                    const method = methods[validatedMessage.method];
-                    try {
-                        // Validate params
-                        const params = method.params.parse(validatedMessage.params);
-                        // Call handler
-                        const result = await method.handler(params);
-                        // Validate result
-                        const validatedResult = method.result.parse(result);
-                        // Send response
-                        const response = {
-                            jsonrpc: '2.0',
-                            id: validatedMessage.id,
-                            result: validatedResult
-                        };
-                        // Write a single clean JSON message
-                        const message = JSON.stringify(response);
-                        process.stdout.write(message + '\n');
-                        return;
-                    } catch (err) {
-                        logger.error('[LOCAL-ERR] Method error:', err);
-                        const errorResp = {
-                            jsonrpc: '2.0',
-                            id: validatedMessage.id,
-                            error: {
-                                code: -32603,
-                                message: err instanceof Error ? err.message : 'Internal error'
-                            }
-                        };
-                        // Write a single clean JSON message
-                        const message = JSON.stringify(errorResp);
-                        process.stdout.write(message + '\n');
-                        return;
-                    }
-                }
-                
-                try {
-                    // Handle initialization messages specially
-                    if (validatedMessage.method === 'initialize') {
-                        const result = await sseClient.request(validatedMessage, z.any());
-                        const response = {
-                            jsonrpc: '2.0',
-                            id: validatedMessage.id,
-                            result: typeof result === 'string' ? JSON.parse(result) : result
-                        };
-                        process.stdout.write(JSON.stringify(response) + '\n');
-                        return;
-                    }
-
-                    // Handle notification messages
-                    if (validatedMessage.method?.startsWith('notifications/')) {
-                        const result = await sseClient.request(validatedMessage, z.any());
-                        // For notifications, we don't need to send a response
-                        return;
-                    }
-                    
-                    const result = await sseClient.request(validatedMessage, z.any());
-                    // Ensure we're passing an object, not a string
-                    const responseObj = {
-                        jsonrpc: '2.0',
-                        id: validatedMessage.id,
-                        result: typeof result === 'string' ? JSON.parse(result) : result
-                    };
-                    // Write a single clean JSON message
-                    const message = JSON.stringify(responseObj);
-                    process.stdout.write(message + '\n');
-                } catch (err) {
-                    logger.error('[SSE-ERR] Request error:', err);
-                    const errorCode = err && typeof err === 'object' && 'code' in err
-                        ? (err as any).code
-                        : -32000;
-                    const errorMsg = err && typeof err === 'object' && 'message' in err
-                        ? (err as any).message
-                        : 'Internal error';
-                    
-                    // Remove MCP error prefix if present
-                    const prefix = `MCP error ${errorCode}:`;
-                    const finalErrorMsg = errorMsg.startsWith(prefix) 
-                        ? errorMsg.slice(prefix.length).trim()
-                        : errorMsg;
-                    
-                    // Create a clean error object
-                    const errorObj = {
-                        jsonrpc: '2.0',
-                        id: validatedMessage.id,
-                        error: {
-                            code: errorCode,
-                            message: finalErrorMsg
-                        }
-                    };
-                    
-                    // Ensure we're not double-stringifying
-                    const message = typeof errorObj === 'string' ? errorObj : JSON.stringify(errorObj);
-                    process.stdout.write(message + '\n');
-                }
-                return;
-            } catch (err) {
-                logger.info('[STDIO-IN] Failed to parse as JSON-RPC request:', err);
-                // Not a request, continue to try notification
-            }
-
-            // Try to parse as a JSON-RPC notification
-            try {
+            // First check if it's a notification message
+            if (parsedMessage.method?.startsWith('notifications/')) {
                 const validatedMessage = jsonRpcNotificationSchema.parse(parsedMessage);
                 await sseTransport.send(validatedMessage);
                 return;
-            } catch (err) {
-                logger.info('[STDIO-IN] Failed to parse as JSON-RPC notification:', err);
-                // Not a notification, log and ignore
-                logger.info('[STDIO-IGNORE] Non-JSON-RPC message:', parsedMessage);
             }
+
+            // Then try to parse as a JSON-RPC request
+            const validatedMessage = jsonRpcRequestSchema.parse(parsedMessage);
+            
+            // Check if this is a local method
+            if (methods[validatedMessage.method]) {
+                const method = methods[validatedMessage.method];
+                try {
+                    // Validate params
+                    const params = method.params.parse(validatedMessage.params);
+                    // Call handler with SSE client
+                    const result = await method.handler(params, sseClient);
+                    // Validate result
+                    const validatedResult = method.result.parse(result);
+                    // Send response
+                    const response = {
+                        jsonrpc: '2.0',
+                        id: validatedMessage.id,
+                        result: validatedResult
+                    };
+                    // Write a single clean JSON message
+                    const message = JSON.stringify(response);
+                    process.stdout.write(message + '\n');
+                    return;
+                } catch (err) {
+                    logger.error('[LOCAL-ERR] Method error:', err);
+                    const errorResp = {
+                        jsonrpc: '2.0',
+                        id: validatedMessage.id,
+                        error: {
+                            code: -32603,
+                            message: err instanceof Error ? err.message : 'Internal error'
+                        }
+                    };
+                    // Write a single clean JSON message
+                    const message = JSON.stringify(errorResp);
+                    process.stdout.write(message + '\n');
+                    return;
+                }
+            }
+            
+            // Handle other messages
+            const result = await sseClient.request(validatedMessage, z.any());
+            const response = {
+                jsonrpc: '2.0',
+                id: validatedMessage.id,
+                result: typeof result === 'string' ? JSON.parse(result) : result
+            };
+            process.stdout.write(JSON.stringify(response) + '\n');
         } catch (err) {
-            logger.error('[STDIO-ERR] Invalid message format:', err);
-            // Don't send invalid messages to stdout
+            logger.error('[SSE-ERR] Request error:', err);
+            const errorCode = err && typeof err === 'object' && 'code' in err
+                ? (err as any).code
+                : -32000;
+            const errorMsg = err && typeof err === 'object' && 'message' in err
+                ? (err as any).message
+                : 'Internal error';
+            
+            // Remove MCP error prefix if present
+            const prefix = `MCP error ${errorCode}:`;
+            const finalErrorMsg = errorMsg.startsWith(prefix) 
+                ? errorMsg.slice(prefix.length).trim()
+                : errorMsg;
+            
+            // Create a clean error object
+            const errorObj = {
+                jsonrpc: '2.0',
+                error: {
+                    code: errorCode,
+                    message: finalErrorMsg
+                }
+            };
+            
+            // Ensure we're not double-stringifying
+            const message = typeof errorObj === 'string' ? errorObj : JSON.stringify(errorObj);
+            process.stdout.write(message + '\n');
         }
     };
 
