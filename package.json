@@ -1,6 +1,6 @@
 {
   "name": "@cloudmcp/connect",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Connect to MCP SSE servers and proxy them to stdio",
   "type": "module",
   "main": "dist/index.js",
