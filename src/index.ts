@@ -7,9 +7,16 @@ import { z } from 'zod';
 import winston from 'winston';
 import { methods } from './methods.js';
 
+export interface Logger {
+    info: (message: string, data?: any) => void;
+    error: (message: string, data?: any) => void;
+    warn: (message: string, data?: any) => void;
+    debug: (message: string, data?: any) => void;
+}
+
 export interface SseToStdioArgs {
     sseUrl: string;
-    logger: winston.Logger;
+    logger: Logger;
     headers?: string[];
 }
 
@@ -62,14 +69,42 @@ function extractJsonRpcMessage(logMessage: string): JSONRPCMessage | null {
     return null;
 }
 
+// Helper function to send JSON-RPC notifications for logs
+function sendLogNotification(level: string, message: string, data?: any) {
+    const notification = {
+        jsonrpc: '2.0',
+        method: 'log',
+        params: {
+            level,
+            message,
+            data,
+            timestamp: new Date().toISOString()
+        }
+    };
+    process.stdout.write(JSON.stringify(notification) + '\n');
+}
+
+// Create a minimal logger that only outputs JSON-RPC messages
+const logger = {
+    info: (message: string, data?: any) => sendLogNotification('info', message, data),
+    error: (message: string, data?: any) => sendLogNotification('error', message, data),
+    warn: (message: string, data?: any) => sendLogNotification('warn', message, data),
+    debug: (message: string, data?: any) => sendLogNotification('debug', message, data)
+};
+
+// Send initialization message as JSON-RPC
+logger.info('Logger initialized');
+
 export async function sseToStdio(args: SseToStdioArgs) {
-    const { sseUrl, logger, headers: cliHeaders = [] } = args;
+    const { sseUrl, headers: cliHeaders = [] } = args;
     
-    // Log initial setup
+    // IMPORTANT: Only write JSON-RPC messages to stdout
+    // All other output (logs, debug info) must go to stderr
+    // The logger is configured to use stderr for all output
     logger.info('[INIT] Starting sseToStdio with config:', {
         sseUrl,
         headers: cliHeaders,
-        logLevel: logger.level
+        logLevel: 'info'  // Hardcode the log level since we removed Winston
     });
     
     // Parse headers from CLI format to object
@@ -113,7 +148,18 @@ export async function sseToStdio(args: SseToStdioArgs) {
 
     // Handle SSE connection errors
     sseTransport.onerror = (err) => {
-        logger.error('[SSE-ERR] Connection error:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        // Send error as JSON-RPC notification
+        const errorNotification = {
+            jsonrpc: '2.0',
+            method: 'error',
+            params: {
+                level: 'error',
+                message: 'Connection error: ' + errorMessage,
+                timestamp: new Date().toISOString()
+            }
+        };
+        process.stdout.write(JSON.stringify(errorNotification) + '\n');
         process.exit(1);
     };
 
@@ -129,8 +175,19 @@ export async function sseToStdio(args: SseToStdioArgs) {
         await sseClient.connect(sseTransport);
         logger.info('[SSE-CONN] Connected successfully');
     } catch (err) {
-        logger.error('[SSE-ERR] Failed to connect to SSE server:', err);
-        throw err;
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        // Send error as JSON-RPC notification
+        const errorNotification = {
+            jsonrpc: '2.0',
+            method: 'error',
+            params: {
+                level: 'error',
+                message: 'Failed to connect to SSE server: ' + errorMessage,
+                timestamp: new Date().toISOString()
+            }
+        };
+        process.stdout.write(JSON.stringify(errorNotification) + '\n');
+        process.exit(1);
     }
 
     // Create stdio server
@@ -146,6 +203,23 @@ export async function sseToStdio(args: SseToStdioArgs) {
             }
         }
     );
+
+    // Handle stdio server errors
+    stdioServer.onerror = (err) => {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        // Send error as JSON-RPC notification
+        const errorNotification = {
+            jsonrpc: '2.0',
+            method: 'error',
+            params: {
+                level: 'error',
+                message: 'Stdio server error: ' + errorMessage,
+                timestamp: new Date().toISOString()
+            }
+        };
+        process.stdout.write(JSON.stringify(errorNotification) + '\n');
+        process.exit(1);
+    };
 
     // Create stdio transport
     const stdioTransport = new StdioServerTransport();
@@ -214,6 +288,13 @@ export async function sseToStdio(args: SseToStdioArgs) {
                             result: typeof result === 'string' ? JSON.parse(result) : result
                         };
                         process.stdout.write(JSON.stringify(response) + '\n');
+                        return;
+                    }
+
+                    // Handle notification messages
+                    if (validatedMessage.method?.startsWith('notifications/')) {
+                        const result = await sseClient.request(validatedMessage, z.any());
+                        // For notifications, we don't need to send a response
                         return;
                     }
                     

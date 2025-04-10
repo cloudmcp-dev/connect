@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
 import { program } from 'commander';
-import { sseToStdio } from './index.js';
-import winston from 'winston';
+import { sseToStdio, Logger } from './index.js';
 
 interface CliOptions {
     url: string;
@@ -27,26 +26,28 @@ program.parse();
 
 const options = program.opts() as CliOptions;
 
-// Create logger
-const logger = winston.createLogger({
-    level: options.logLevel,
-    format: winston.format.combine(
-        winston.format.timestamp(),
-        winston.format.printf(({ timestamp, level, message, ...metadata }) => {
-            let msg = `${timestamp} [${level.toUpperCase()}] ${message}`;
-            if (Object.keys(metadata).length > 0) {
-                msg += ` ${JSON.stringify(metadata)}`;
-            }
-            return msg;
-        })
-    ),
-    transports: [
-        new winston.transports.Console({
-            handleExceptions: true,
-            handleRejections: true
-        })
-    ]
-});
+// Helper function to send JSON-RPC notifications for logs
+function sendLogNotification(level: string, message: string, data?: any) {
+    const notification = {
+        jsonrpc: '2.0',
+        method: 'log',
+        params: {
+            level,
+            message,
+            data,
+            timestamp: new Date().toISOString()
+        }
+    };
+    process.stdout.write(JSON.stringify(notification) + '\n');
+}
+
+// Create a minimal logger that only outputs JSON-RPC messages
+const logger: Logger = {
+    info: (message: string, data?: any) => sendLogNotification('info', message, data),
+    error: (message: string, data?: any) => sendLogNotification('error', message, data),
+    warn: (message: string, data?: any) => sendLogNotification('warn', message, data),
+    debug: (message: string, data?: any) => sendLogNotification('debug', message, data)
+};
 
 // Add a test log to verify logging is working
 logger.info('Logger initialized with level:', options.logLevel);
