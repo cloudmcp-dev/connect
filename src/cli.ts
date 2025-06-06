@@ -49,21 +49,47 @@ const logger: Logger = {
     debug: (message: string, data?: any) => sendLogNotification('debug', message, data)
 };
 
-// Add a test log to verify logging is working
 logger.info('Logger initialized with level:', options.logLevel);
 
-// Add authentication headers if provided
-if (options.clientId && options.clientSecret) {
-    options.header = options.header || [];
-    options.header.push(`Authorization: Basic ${Buffer.from(`${options.clientId}:${options.clientSecret}`).toString('base64')}`);
+async function getJwtToken(host: string, clientId: string, clientSecret: string): Promise<string> {
+    const resp = await fetch(`${host}/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            grant_type: 'client_credentials',
+            client_id: clientId,
+            client_secret: clientSecret,
+        }),
+    });
+    if (!resp.ok) throw new Error(`Token request failed: ${resp.statusText}`);
+    const data = await resp.json();
+    if (!data.access_token) throw new Error('No access_token in response');
+    return data.access_token;
 }
 
-// Run in SSE to stdio mode
-sseToStdio({
-    sseUrl: options.url,
-    logger,
-    headers: options.header
-}).catch((err: Error) => {
-    logger.error('Failed to start SSE to stdio:', err);
-    process.exit(1);
-}); 
+(async () => {
+    // Add authentication headers if provided
+    if (options.clientId && options.clientSecret) {
+        const urlObj = new URL(options.url);
+        const host = `${urlObj.protocol}//${urlObj.host}`;
+        try {
+            const jwt = await getJwtToken(host, options.clientId, options.clientSecret);
+            options.header = options.header || [];
+            options.header.push(`Authorization: Bearer ${jwt}`);
+            logger.info('Obtained JWT and set Authorization header');
+        } catch (err) {
+            logger.error('Failed to obtain JWT:', err);
+            process.exit(1);
+        }
+    }
+
+    // Run in SSE to stdio mode
+    sseToStdio({
+        sseUrl: options.url,
+        logger,
+        headers: options.header
+    }).catch((err: Error) => {
+        logger.error('Failed to start SSE to stdio:', err);
+        process.exit(1);
+    });
+})(); 

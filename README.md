@@ -18,12 +18,12 @@ This is useful to connect to **@cloudmcp/gateway**
 ### Using npm/npx
 
 ```bash
-npx -y @cloudmcp/connect --url "https://gateway.cloudmcp.dev/<organization>/<service>/sse" --clientId "<client_id>" --clientSecret "<client_secret>"
+npx -y @cloudmcp/connect --url "https://gateway.cloudmcp.dev/<id>/sse" --clientId "<client_id>" --clientSecret "<client_secret>"
 ```
 
 ## Options
 
-- **`--url <url>`**: The CloudMCP Gateway URL in the format `https://gateway.cloudmcp.dev/<organization>/<service>/sse`
+- **`--url <url>`**: The CloudMCP Gateway URL in the format `https://gateway.cloudmcp.dev/<id>/sse`
 - **`--clientId <client_id>`**: Your CloudMCP client ID for authentication
 - **`--clientSecret <client_secret>`**: Your CloudMCP client secret for authentication
 - **`--logLevel debug | info | warn | error | none`**: Controls logging level (default: `info`). Use `none` to suppress all logs.
@@ -44,7 +44,7 @@ Claude Desktop can use @cloudmcp/connect to connect to CloudMCP Gateway.
         "-y",
         "@cloudmcp/connect",
         "--url",
-        "https://gateway.cloudmcp.dev/<organization>/<service>/sse",
+        "https://gateway.cloudmcp.dev/<id>/sse",
         "--clientId",
         "<client_id>",
         "--clientSecret",
